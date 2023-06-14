@@ -1,14 +1,16 @@
+import enum
 import sys
 
 if sys.version_info < (3, 10):
     from typing_extensions import TypeAlias
 else:
     from typing import TypeAlias
-from typing import TYPE_CHECKING, Generic, Optional, TypeVar, Union
+
+from typing import TYPE_CHECKING, Generic, Optional, Type, TypeVar, Union
 
 import pyarrow as pa
 
-from . import validators
+from . import extensiontypes, validators
 
 if TYPE_CHECKING:
     from .tables import Table
@@ -895,3 +897,33 @@ class RunEndEncodedColumn(Column):
             metadata=metadata,
             validator=validator,
         )
+
+
+class EnumColumn(Column):
+    def __init__(
+        self,
+        enum_class: Type[enum.Enum],
+        nullable: bool = True,
+        metadata: Optional[MetadataDict] = None,
+        validator: Optional[validators.Validator] = None,
+    ):
+        self.etype = extensiontypes.EnumType(enum_class)
+
+        enum_validator = validators.valid_enum(enum_class)
+
+        if validator is None:
+            validator = enum_validator
+        else:
+            validator = validators.and_(validator, enum_validator)
+
+        super().__init__(
+            dtype=self.etype,
+            nullable=nullable,
+            metadata=metadata,
+            validator=validator,
+        )
+
+    def __get__(self, obj: "Table", objtype: type) -> extensiontypes.EnumArray:
+        if obj is None:
+            return self
+        return obj.table[self.name].combine_chunks()
